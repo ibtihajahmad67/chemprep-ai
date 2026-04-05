@@ -12,7 +12,7 @@ try:
     TEACHER_SECRET = st.secrets.get("TEACHER_SECRET","ibtihaj2024")
 except:
     # Local development — apni keys yahan likho
-    GEMINI_KEY     = "YOUR_GEMINI_KEY_HERE"
+    GEMINI_KEY     = "AIzaSyC9r27mTZhtlpxUt7lAP5atZKKN3eBq1K8"
     SUPABASE_URL   = "https://ualngmynupvjytgvckif.supabase.co"
     SUPABASE_KEY   = "sb_publishable_wQTmHy9kI_W4f0Q3Ouz87A_d8wr3Pwi"
     TEACHER_SECRET = "ibtihaj2024"
@@ -457,6 +457,15 @@ elif st.session_state.page=="quiz" and not st.session_state.quiz_done:
         st.session_state.answers[idx]="X" if q["type"]=="mcq" else "(Time expired)"
         st.session_state.submitted_current=True; st.session_state.showing_result=True
         st.session_state.streak=0; st.rerun()
+
+    # Safety guard — agar question empty hai to skip
+    if not str(q.get("question","")).strip():
+        st.warning(f"⚠️ Q{pos+1} is empty — skipping automatically.")
+        st.session_state.current_q=pos+1
+        st.session_state.submitted_current=False
+        st.session_state.showing_result=False
+        st.session_state.q_t=None; st.session_state.time_up=False
+        st.rerun()
 
     # Question card
     st.markdown(f"<div class='card'><b>Q{pos+1}:</b> {q['question']}</div>",unsafe_allow_html=True)
