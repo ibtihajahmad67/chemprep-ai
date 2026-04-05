@@ -187,22 +187,29 @@ elif st.session_state.page=="teacher_dashboard":
         topic=""
         if restrict_topic or "AI" in q_source:
             topic=st.text_input("Topic:",placeholder="e.g. Chemical Bonding")
-        c1,c2=st.columns(2)
-        with c1: use_mcq=st.checkbox("MCQs",value=False,key="ctm")
-        with c2: use_saq=st.checkbox("SAQs",key="cts")
-        mcq_count=mcq_marks=saq_count=saq_marks=0
-        if use_mcq:
-            x1,x2=st.columns(2)
-            with x1: mcq_count=st.number_input("No. MCQs:",1,30,5,1,key="ctmn")
-            with x2: mcq_marks=st.number_input("Marks/MCQ:",1,10,1,1,key="ctmm")
-        if use_saq:
-            x1,x2=st.columns(2)
-            with x1: saq_count=st.number_input("No. SAQs:",1,20,3,1,key="ctsn")
-            with x2: saq_marks=st.number_input("Marks/SAQ:",1,10,2,1,key="ctsm")
+        # ── MCQ / SAQ checkboxes in 2 columns ──────────────────────────────
+        col_left, col_right = st.columns(2)
+        with col_left:
+            st.markdown("### 📋 MCQs")
+            use_mcq=st.checkbox("Include MCQs",value=False,key="ctm")
+            if use_mcq:
+                mcq_count=st.number_input("No. of MCQs:",1,30,5,1,key="ctmn")
+                mcq_marks=st.number_input("Marks/MCQ:",1,10,1,1,key="ctmm")
+            else:
+                mcq_count=mcq_marks=0
+        with col_right:
+            st.markdown("### 📝 SAQs")
+            use_saq=st.checkbox("Include SAQs",value=False,key="cts")
+            if use_saq:
+                saq_count=st.number_input("No. of SAQs:",1,20,3,1,key="ctsn")
+                saq_marks=st.number_input("Marks/SAQ:",1,10,2,1,key="ctsm")
+            else:
+                saq_count=saq_marks=0
         manual_questions=[]
         if "Manual" in q_source:
             st.markdown("#### ✍️ Write Questions")
-            nm=st.number_input("How many?",1,20,3,1,key="nm")
+            st.caption("How many questions do you want to write manually? (These are separate from any AI-generated questions above.)")
+            nm=st.number_input("Total questions to write:",1,20,3,1,key="nm")
             for i in range(int(nm)):
                 st.markdown(f"**Q{i+1}:**")
                 qt=st.selectbox("Type:",["MCQ","SAQ"],key=f"mqt{i}")
@@ -228,8 +235,10 @@ elif st.session_state.page=="teacher_dashboard":
                     bank_selected.append(bq)
         mt=sum(180 if q["type"]=="saq" else 60 for q in manual_questions+bank_selected)
         at=(int(mcq_count)*60 if use_mcq and "AI" in q_source else 0)+(int(saq_count)*180 if use_saq and "AI" in q_source else 0)
-        tmin=(at+mt)//60+5
-        st.info(f"🕐 Test time: **{tmin} min**")
+        total_seconds=at+mt
+        tmin=max(1,total_seconds//60) if total_seconds>0 else 0
+        if tmin>0:
+            st.info(f"🕐 Estimated test time: **{tmin} min**")
         if st.button("🚀 Generate Test & Get Code",use_container_width=True):
             if not title: st.warning("⚠️ Enter title!")
             else:
@@ -247,7 +256,8 @@ elif st.session_state.page=="teacher_dashboard":
                         all_q.append({"question":bq["question_text"],"type":bq["question_type"],"options":bq.get("options"),"answer":bq.get("correct_answer"),"model_answer":bq.get("correct_answer"),"explanation":bq.get("explanation",""),"hint":bq.get("hint",""),"marks":bq.get("marks",1),"order_num":len(all_q)+i+1})
                     if not all_q: st.warning("⚠️ No questions added!"); st.stop()
                     code=gen_code()
-                    tr=sb.table("tests").insert({"teacher_id":u["id"],"title":title,"topic":topic,"test_code":code,"time_limit_minutes":tmin,"is_active":True}).execute()
+                    save_tmin=max(1,tmin) if tmin>0 else max(1,(sum(180 if q["type"]=="saq" else 60 for q in all_q))//60)
+                    tr=sb.table("tests").insert({"teacher_id":u["id"],"title":title,"topic":topic,"test_code":code,"time_limit_minutes":save_tmin,"is_active":True}).execute()
                     tid=tr.data[0]["id"]
                     for q in all_q:
                         sb.table("questions").insert({"test_id":tid,"question_text":q["question"],"question_type":q["type"],"options":q.get("options"),"correct_answer":q.get("answer") or q.get("model_answer",""),"explanation":q.get("explanation",""),"hint":q.get("hint",""),"marks":q.get("marks",1),"order_num":q.get("order_num",1)}).execute()
@@ -535,11 +545,7 @@ elif st.session_state.page=="quiz" and not st.session_state.quiz_done:
                 if st.session_state.streak>=3: st.balloons()
             else:
                 co=next((o for o in q["options"] if o.startswith(q["answer"])),q["answer"]); st.error(f"❌ Correct: **{co}**")
-            exp_val=str(q.get("explanation","")).strip()
-            if exp_val and exp_val.lower()!="none":
-                st.info(f"📖 **Explanation:** {exp_val}")
-            else:
-                st.info("📖 **Explanation:** Not available for this question.")
+            # Explanation will appear in the Results screen after the full test
 
     # ── SAQ ──────────────────────────────────────────────────────────────
     elif q["type"]=="saq":
