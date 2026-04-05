@@ -1,16 +1,24 @@
 import streamlit as st
-import google.generativeai as genai
 from supabase import create_client
 import json, time, re, random, string, hashlib
 from datetime import datetime
+import google.generativeai as genai
 
-GEMINI_KEY     = st.secrets.get("GEMINI_KEY","")
-SUPABASE_URL   = st.secrets.get("SUPABASE_URL","")
-SUPABASE_KEY   = st.secrets.get("SUPABASE_KEY","")
-TEACHER_SECRET = st.secrets.get("TEACHER_SECRET","ibtihaj2024")
+# ── Keys: Streamlit Cloud secrets ya local fallback ──────────────────
+try:
+    GEMINI_KEY     = st.secrets["GEMINI_KEY"]
+    SUPABASE_URL   = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY   = st.secrets["SUPABASE_KEY"]
+    TEACHER_SECRET = st.secrets.get("TEACHER_SECRET","ibtihaj2024")
+except:
+    # Local development — apni keys yahan likho
+    GEMINI_KEY     = "YOUR_GEMINI_KEY_HERE"
+    SUPABASE_URL   = "https://ualngmynupvjytgvckif.supabase.co"
+    SUPABASE_KEY   = "sb_publishable_wQTmHy9kI_W4f0Q3Ouz87A_d8wr3Pwi"
+    TEACHER_SECRET = "ibtihaj2024"
 
 genai.configure(api_key=GEMINI_KEY)
-ai  = genai.GenerativeModel("gemini-2.5-flash-lite")
+ai  = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
 sb  = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="ChemPrep AI", page_icon="⚗️", layout="centered")
