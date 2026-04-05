@@ -124,14 +124,9 @@ elif st.session_state.page=="student_auth":
         if st.button("Login",use_container_width=True,key="slb"):
             r=sb.table("users").select("*").eq("email",e).eq("role","student").execute()
             if r.data and r.data[0]["password_hash"]==hp(p):
-                # Check email verification
-                if not r.data[0].get("is_verified",False):
-                    st.warning("⚠️ Your email is not verified yet! Please check your email inbox and click the verification link. Then come back and login.")
-                    st.info("💡 Didn't receive the email? Re-register with the same details to resend.")
-                else:
-                    st.session_state.user=r.data[0]; st.session_state.role="student"
-                    st.session_state.page="student_home"; st.rerun()
-            else: st.error("❌ Wrong credentials!")
+                st.session_state.user=r.data[0]; st.session_state.role="student"
+                st.session_state.page="student_home"; st.rerun()
+            else: st.error("❌ Wrong email or password!")
     with tab2:
         n=st.text_input("Name:",key="srn"); e2=st.text_input("Email:",key="sre"); p2=st.text_input("Password:",type="password",key="srp")
         if st.button("Register",use_container_width=True,key="srb"):
@@ -140,19 +135,9 @@ elif st.session_state.page=="student_auth":
             elif len(p2)<4: st.error("❌ Password must be at least 4 characters!")
             else:
                 try:
-                    # Insert with is_verified=False — Supabase will send verification email automatically
-                    sb.table("users").insert({"name":n,"email":e2,"role":"student","password_hash":hp(p2),"is_verified":False}).execute()
-                    # Trigger Supabase Auth signup for email verification (uses Supabase built-in email)
-                    try:
-                        import requests
-                        requests.post(f"{SUPABASE_URL}/auth/v1/signup",
-                            headers={"apikey":SUPABASE_KEY,"Content-Type":"application/json"},
-                            json={"email":e2,"password":p2},timeout=10)
-                    except: pass
-                    st.success("✅ Account created! A verification email has been sent to your inbox.")
-                    st.info("📧 Please check your email and click the verification link before logging in.")
-                    st.warning("⚠️ Check your spam/junk folder if you don't see it in inbox.")
-                except: st.error("❌ Email already registered! Try logging in instead.")
+                    sb.table("users").insert({"name":n,"email":e2,"role":"student","password_hash":hp(p2)}).execute()
+                    st.success("✅ Account created! Go to Login tab and login now.")
+                except: st.error("❌ This email is already registered! Try logging in.")
     with tab3:
         st.info("Enter your registered email and a new password to reset.")
         fp_email=st.text_input("Registered email:",key="sfpe")
