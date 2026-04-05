@@ -18,7 +18,7 @@ except:
     TEACHER_SECRET = "ibtihaj2024"
 
 genai.configure(api_key=GEMINI_KEY)
-ai  = genai.GenerativeModel("gemini-2.5-flash-preview-05-20")
+ai  = genai.GenerativeModel("gemini-1.5-flash")
 sb  = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="ChemPrep AI", page_icon="⚗️", layout="centered")
@@ -95,11 +95,16 @@ elif st.session_state.page=="teacher_auth":
     with tab1:
         e=st.text_input("Email:",key="tle"); p=st.text_input("Password:",type="password",key="tlp")
         if st.button("Login",use_container_width=True,key="tlb"):
-            r=sb.table("users").select("*").eq("email",e).eq("role","teacher").execute()
-            if r.data and r.data[0]["password_hash"]==hp(p):
-                st.session_state.user=r.data[0]; st.session_state.role="teacher"
-                st.session_state.page="teacher_dashboard"; st.rerun()
-            else: st.error("❌ Wrong credentials! Forgot password? Use Reset Password tab.")
+            # Check if this email is registered as student only
+            student_check=sb.table("users").select("*").eq("email",e).eq("role","student").execute()
+            if student_check.data:
+                st.error("❌ This email is registered as a Student, not a Teacher! Please use Student Login.")
+            else:
+                r=sb.table("users").select("*").eq("email",e).eq("role","teacher").execute()
+                if r.data and r.data[0]["password_hash"]==hp(p):
+                    st.session_state.user=r.data[0]; st.session_state.role="teacher"
+                    st.session_state.page="teacher_dashboard"; st.rerun()
+                else: st.error("❌ Wrong credentials! Forgot password? Use Reset Password tab.")
     with tab2:
         n=st.text_input("Name:",key="trn"); e2=st.text_input("Email:",key="tre"); p2=st.text_input("Password:",type="password",key="trp")
         if st.button("Register",use_container_width=True,key="trb"):
@@ -130,11 +135,16 @@ elif st.session_state.page=="student_auth":
     with tab1:
         e=st.text_input("Email:",key="sle"); p=st.text_input("Password:",type="password",key="slp")
         if st.button("Login",use_container_width=True,key="slb"):
-            r=sb.table("users").select("*").eq("email",e).eq("role","student").execute()
-            if r.data and r.data[0]["password_hash"]==hp(p):
-                st.session_state.user=r.data[0]; st.session_state.role="student"
-                st.session_state.page="student_home"; st.rerun()
-            else: st.error("❌ Wrong email or password!")
+            # Check if this email is registered as teacher only
+            teacher_check=sb.table("users").select("*").eq("email",e).eq("role","teacher").execute()
+            if teacher_check.data:
+                st.error("❌ This email is registered as a Teacher! Please use Teacher Login from the home page.")
+            else:
+                r=sb.table("users").select("*").eq("email",e).eq("role","student").execute()
+                if r.data and r.data[0]["password_hash"]==hp(p):
+                    st.session_state.user=r.data[0]; st.session_state.role="student"
+                    st.session_state.page="student_home"; st.rerun()
+                else: st.error("❌ Wrong email or password!")
     with tab2:
         n=st.text_input("Name:",key="srn"); e2=st.text_input("Email:",key="sre"); p2=st.text_input("Password:",type="password",key="srp")
         if st.button("Register",use_container_width=True,key="srb"):
@@ -178,7 +188,7 @@ elif st.session_state.page=="teacher_dashboard":
         if restrict_topic or "AI" in q_source:
             topic=st.text_input("Topic:",placeholder="e.g. Chemical Bonding")
         c1,c2=st.columns(2)
-        with c1: use_mcq=st.checkbox("MCQs",value=True,key="ctm")
+        with c1: use_mcq=st.checkbox("MCQs",value=False,key="ctm")
         with c2: use_saq=st.checkbox("SAQs",key="cts")
         mcq_count=mcq_marks=saq_count=saq_marks=0
         if use_mcq:
