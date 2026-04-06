@@ -6,7 +6,7 @@ import google.generativeai as genai
 
 # ── Keys: Streamlit Cloud secrets ya local fallback ──────────────────
 try:
-    GEMINI_KEY     = st.secrets["AIzaSyC9r27mTZhtlpxUt7lAP5atZKKN3eBq1K8"]
+    GEMINI_KEY     = st.secrets["GEMINI_KEY"]
     SUPABASE_URL   = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY   = st.secrets["SUPABASE_KEY"]
     TEACHER_SECRET = st.secrets.get("TEACHER_SECRET","ibtihaj2024")
@@ -19,7 +19,7 @@ import google.generativeai as genai
 
 # ── Keys: Streamlit Cloud secrets ya local fallback ──────────────────
 try:
-    GEMINI_KEY     = st.secrets["AIzaSyC9r27mTZhtlpxUt7lAP5atZKKN3eBq1K8"]
+    GEMINI_KEY     = st.secrets["GEMINI_KEY"]
     SUPABASE_URL   = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY   = st.secrets["SUPABASE_KEY"]
     TEACHER_SECRET = st.secrets.get("TEACHER_SECRET","ibtihaj2024")
