@@ -241,7 +241,7 @@ elif st.session_state.page=="teacher_dashboard":
     with tab1:
         st.markdown("### Create New Test")
         title=st.text_input("Test Title:")
-        q_source=st.radio("Question source:",["🤖 AI — Auto generate","✍️ Manual — I will write","📖 Bank — From my saved questions"],key="qsrc")
+        q_source=st.radio("Question source:",["🤖 AI — Auto generate","✍️ Manual — Add your own questions","📖 Bank — From my saved questions"],key="qsrc")
         restrict_topic=st.toggle("🔒 Restrict topic (optional)",value=False)
         topic=""
         if restrict_topic or "AI" in q_source:
