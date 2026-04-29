@@ -6,19 +6,55 @@ import google.generativeai as genai
 
 # ── Keys: Streamlit Cloud secrets ya local fallback ──────────────────
 try:
-    GEMINI_KEY     = st.secrets["GEMINI_KEY"]
     SUPABASE_URL   = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY   = st.secrets["SUPABASE_KEY"]
     TEACHER_SECRET = st.secrets.get("TEACHER_SECRET","ibtihaj2024")
+    # Streamlit Cloud pe multiple keys likhne ka tarika:
+    # secrets.toml mein: GEMINI_KEYS = ["key1","key2",""]
+    # Ya single key bhi chal jaye ga: GEMINI_KEY = "key1"
+    if "GEMINI_KEYS" in st.secrets:
+        GEMINI_KEYS = list(st.secrets["GEMINI_KEYS"])
+    else:
+        GEMINI_KEYS = [st.secrets["GEMINI_KEY"]]
 except:
-    # Local development — apni keys yahan likho
-    GEMINI_KEY     = "YOUR_GEMINI_KEY_HERE"
-    SUPABASE_URL   = "https://ualngmynupvjytgvckif.supabase.co"
-    SUPABASE_KEY   = "sb_publishable_wQTmHy9kI_W4f0Q3Ouz87A_d8wr3Pwi"
+    # ═══════════════════════════════════════════════════════════════
+    # LOCAL DEVELOPMENT — .streamlit/secrets.toml use karo
+    # Yahan keys mat likho — secrets.toml mein likhna secure hai
+    # ═══════════════════════════════════════════════════════════════
+    GEMINI_KEYS = [
+        "YOUR_GEMINI_KEY_HERE"]
+    SUPABASE_URL   = "YOUR_SUPABASE_URL_HERE"
+    SUPABASE_KEY   = "YOUR_SUPABASE_KEY_HERE"
     TEACHER_SECRET = "ibtihaj2024"
 
-genai.configure(api_key=GEMINI_KEY)
-ai  = genai.GenerativeModel("gemini-1.5-flash")
+# ── Gemini Key Rotation — Automatic ──────────────────────────────────
+# Jab ek key ka quota khatam ho, automatically next key use hogi
+def get_ai_response(prompt, retries=None):
+    """
+    Smart key rotation: ek key fail ho to next try karta hai.
+    Saari keys fail hon to clear error deta hai.
+    """
+    if retries is None:
+        retries = GEMINI_KEYS.copy()
+        random.shuffle(retries)  # Random order — load balance
+
+    for key in retries:
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt)
+            return response
+        except Exception as e:
+            err = str(e)
+            # Quota khatam ya rate limit — next key try karo
+            if "429" in err or "quota" in err.lower() or "exhausted" in err.lower() or "ResourceExhausted" in err:
+                continue
+            # Koi aur error — wahi error raise karo
+            raise e
+
+    # Saari keys fail — user ko batao
+    raise Exception("⚠️ Saari Gemini API keys ka quota khatam ho gaya! Kal reset ho gi ya nai key add karo.")
+
 sb  = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(page_title="ChemPrep AI", page_icon="⚗️", layout="centered")
@@ -46,6 +82,29 @@ def safe_json(text):
     raise ValueError("JSON parse failed")
 
 def gen_code(): return ''.join(random.choices(string.ascii_uppercase+string.digits,k=8))
+
+# ── Chemistry Text Helper ─────────────────────────────────────────────────────
+CHEM_SYMS = [
+    ("H₂O","H₂O"),("CO₂","CO₂"),("H₂SO₄","H₂SO₄"),("HNO₃","HNO₃"),
+    ("NH₃","NH₃"),("NaOH","NaOH"),("Ca²⁺","Ca²⁺"),("SO₄²⁻","SO₄²⁻"),
+    ("→","→"),("⇌","⇌"),("Δ","Δ"),("°C","°C"),
+    ("²","²"),("³","³"),("₁","₁"),("₂","₂"),("₃","₃"),
+    ("α","α"),("β","β"),("γ","γ"),("λ","λ"),("μ","μ"),
+]
+
+def chem_text_area(label, key, height=120, placeholder="Type here..."):
+    """Text area with chemistry symbol insert buttons above it."""
+    st.markdown(f"**{label}**")
+    with st.expander("🔬 Insert symbols (click to add at end)", expanded=False):
+        cols = st.columns(8)
+        for i,(lbl,val) in enumerate(CHEM_SYMS):
+            with cols[i % 8]:
+                if st.button(lbl, key=f"_sym_{key}_{i}"):
+                    st.session_state[key] = st.session_state.get(key,"") + val
+                    st.rerun()
+        st.caption("Tip: **H₂O** already has subscript. For superscript type ² ³ from above. Bold/italic use *word* or **word**.")
+    return st.text_area("", key=key, height=height, placeholder=placeholder, label_visibility="collapsed")
+
 
 def q_timer(limit):
     if st.session_state.q_t is None:
@@ -193,7 +252,7 @@ elif st.session_state.page=="teacher_dashboard":
             st.markdown("### 📋 MCQs")
             use_mcq=st.checkbox("Include MCQs",value=False,key="ctm")
             if use_mcq:
-                mcq_count=st.number_input("No. of MCQs:",1,30,5,1,key="ctmn")
+                mcq_count=st.number_input("No. of MCQs:",1,30,1,1,key="ctmn")
                 mcq_marks=st.number_input("Marks/MCQ:",1,10,1,1,key="ctmm")
             else:
                 mcq_count=mcq_marks=0
@@ -201,7 +260,7 @@ elif st.session_state.page=="teacher_dashboard":
             st.markdown("### 📝 SAQs")
             use_saq=st.checkbox("Include SAQs",value=False,key="cts")
             if use_saq:
-                saq_count=st.number_input("No. of SAQs:",1,20,3,1,key="ctsn")
+                saq_count=st.number_input("No. of SAQs:",1,20,1,1,key="ctsn")
                 saq_marks=st.number_input("Marks/SAQ:",1,10,2,1,key="ctsm")
             else:
                 saq_count=saq_marks=0
@@ -213,16 +272,16 @@ elif st.session_state.page=="teacher_dashboard":
             for i in range(int(nm)):
                 st.markdown(f"**Q{i+1}:**")
                 qt=st.selectbox("Type:",["MCQ","SAQ"],key=f"mqt{i}")
-                qtxt=st.text_area("Question:",key=f"mqtxt{i}",height=70)
+                qtxt=chem_text_area("Question:",f"mqtxt{i}",height=70,placeholder="Type question here... use symbols toolbar for H₂O, CO₂ etc.")
                 qmrk=st.number_input("Marks:",1,10,1,key=f"mqmrk{i}")
                 if qt=="MCQ":
                     a=st.text_input("A:",key=f"mqa{i}"); b=st.text_input("B:",key=f"mqb{i}")
                     c=st.text_input("C:",key=f"mqc{i}"); d=st.text_input("D:",key=f"mqd{i}")
                     ans=st.selectbox("Correct:",["A","B","C","D"],key=f"mqans{i}")
-                    exp=st.text_area("Explanation:",key=f"mqexp{i}",height=50)
+                    exp=chem_text_area("Explanation:",f"mqexp{i}",height=50,placeholder="Optional explanation...")
                     manual_questions.append({"question":qtxt,"type":"mcq","marks":qmrk,"options":[f"A) {a}",f"B) {b}",f"C) {c}",f"D) {d}"],"answer":ans,"explanation":exp,"hint":""})
                 else:
-                    mans=st.text_area("Model Answer:",key=f"mqmans{i}",height=70)
+                    mans=chem_text_area("Model Answer:",f"mqmans{i}",height=70,placeholder="Write the ideal answer here...")
                     manual_questions.append({"question":qtxt,"type":"saq","marks":qmrk,"model_answer":mans,"answer":mans,"hint":""})
                 st.markdown("---")
         bank_selected=[]
@@ -241,15 +300,17 @@ elif st.session_state.page=="teacher_dashboard":
             st.info(f"🕐 Estimated test time: **{tmin} min**")
         if st.button("🚀 Generate Test & Get Code",use_container_width=True):
             if not title: st.warning("⚠️ Enter title!")
+            elif not use_mcq and not use_saq and not manual_questions and not bank_selected:
+                st.error("❌ Please select at least one question type — MCQs or SAQs!")
             else:
                 with st.spinner("⏳ Creating..."):
                     all_q=[]
                     if "AI" in q_source and topic:
                         if use_mcq and mcq_count>0:
-                            r=ai.generate_content(f"Create {int(mcq_count)} MCQs on {topic} for FSc/MDCAT. ONLY JSON ARRAY:\n[{{\"question\":\"?\",\"options\":[\"A) a\",\"B) b\",\"C) c\",\"D) d\"],\"answer\":\"A\",\"explanation\":\"...\",\"hint\":\"...\"}}]")
+                            r=get_ai_response(f"Create {int(mcq_count)} MCQs on {topic} for FSc/MDCAT. ONLY JSON ARRAY:\n[{{\"question\":\"?\",\"options\":[\"A) a\",\"B) b\",\"C) c\",\"D) d\"],\"answer\":\"A\",\"explanation\":\"...\",\"hint\":\"...\"}}]")
                             for i,q in enumerate(safe_json(r.text)): q.update({"type":"mcq","marks":int(mcq_marks),"order_num":len(all_q)+i+1}); all_q.append(q)
                         if use_saq and saq_count>0:
-                            r=ai.generate_content(f"Create {int(saq_count)} SAQs on {topic} for FSc/MDCAT. ONLY JSON ARRAY:\n[{{\"question\":\"?\",\"model_answer\":\"2-3 sentences.\",\"hint\":\"...\"}}]")
+                            r=get_ai_response(f"Create {int(saq_count)} SAQs on {topic} for FSc/MDCAT. ONLY JSON ARRAY:\n[{{\"question\":\"?\",\"model_answer\":\"2-3 sentences.\",\"hint\":\"...\"}}]")
                             for i,q in enumerate(safe_json(r.text)): q.update({"type":"saq","marks":int(saq_marks),"order_num":len(all_q)+i+1}); all_q.append(q)
                     for i,q in enumerate(manual_questions): q["order_num"]=len(all_q)+i+1; all_q.append(q)
                     for i,bq in enumerate(bank_selected):
@@ -269,18 +330,18 @@ elif st.session_state.page=="teacher_dashboard":
         st.markdown("### 📖 Question Bank")
         with st.expander("➕ Add Question"):
             bqt=st.selectbox("Type:",["MCQ","SAQ"],key="bqt")
-            bqtxt=st.text_area("Question:",key="bqtxt",height=70)
+            bqtxt=chem_text_area("Question:","bqtxt",height=70,placeholder="Type question... use 🔬 for symbols")
             btopic=st.text_input("Topic:",key="bqtopic")
             bmarks=st.number_input("Marks:",1,10,1,key="bqmarks")
             if bqt=="MCQ":
                 ba=st.text_input("A:",key="bqa"); bb=st.text_input("B:",key="bqb")
                 bc=st.text_input("C:",key="bqc"); bd=st.text_input("D:",key="bqd")
                 bans=st.selectbox("Correct:",["A","B","C","D"],key="bqans")
-                bexp=st.text_area("Explanation:",key="bqexp",height=50)
+                bexp=chem_text_area("Explanation:","bqexp",height=50,placeholder="Optional explanation...")
                 if st.button("💾 Save",key="sbq"):
                     if bqtxt: sb.table("question_bank").insert({"teacher_id":u["id"],"question_text":bqtxt,"question_type":"mcq","topic":btopic,"marks":bmarks,"options":[f"A) {ba}",f"B) {bb}",f"C) {bc}",f"D) {bd}"],"correct_answer":bans,"explanation":bexp}).execute(); st.success("✅ Saved!"); st.rerun()
             else:
-                bmans=st.text_area("Model Answer:",key="bqmans",height=70)
+                bmans=chem_text_area("Model Answer:","bqmans",height=70,placeholder="Write the ideal answer...")
                 if st.button("💾 Save",key="sbqsaq"):
                     if bqtxt: sb.table("question_bank").insert({"teacher_id":u["id"],"question_text":bqtxt,"question_type":"saq","topic":btopic,"marks":bmarks,"correct_answer":bmans}).execute(); st.success("✅ Saved!"); st.rerun()
         bank=sb.table("question_bank").select("*").eq("teacher_id",u["id"]).execute()
@@ -364,14 +425,14 @@ elif st.session_state.page=="student_home":
         with col_mcq:
             um=st.checkbox("MCQs",value=False,key="apm")
             if um:
-                mn=st.number_input("Number of MCQs:",1,30,5,1,key="apmn")
+                mn=st.number_input("Number of MCQs:",1,30,1,1,key="apmn")
                 mm=st.number_input("Marks per MCQ:",1,10,1,1,key="apmm")
             else:
                 mn=mm=0
         with col_saq:
             us=st.checkbox("SAQs",value=False,key="aps")
             if us:
-                sn=st.number_input("Number of SAQs:",1,20,3,1,key="apsn")
+                sn=st.number_input("Number of SAQs:",1,20,1,1,key="apsn")
                 sm=st.number_input("Marks per SAQ:",1,10,2,1,key="apsm")
             else:
                 sn=sm=0
@@ -382,10 +443,10 @@ elif st.session_state.page=="student_home":
                 with st.spinner("⏳ Generating..."):
                     all_q=[]
                     if um and mn>0:
-                        r=ai.generate_content(f"Create {int(mn)} MCQs on {topic} for FSc/MDCAT. ONLY JSON:\n[{{\"question\":\"?\",\"options\":[\"A) a\",\"B) b\",\"C) c\",\"D) d\"],\"answer\":\"A\",\"explanation\":\"...\",\"hint\":\"...\"}}]")
+                        r=get_ai_response(f"Create {int(mn)} MCQs on {topic} for FSc/MDCAT. ONLY JSON:\n[{{\"question\":\"?\",\"options\":[\"A) a\",\"B) b\",\"C) c\",\"D) d\"],\"answer\":\"A\",\"explanation\":\"...\",\"hint\":\"...\"}}]")
                         for q in safe_json(r.text): q.update({"type":"mcq","marks":int(mm)}); all_q.append(q)
                     if us and sn>0:
-                        r=ai.generate_content(f"Create {int(sn)} SAQs on {topic} for FSc/MDCAT. ONLY JSON:\n[{{\"question\":\"?\",\"model_answer\":\"2-3 sentences.\",\"hint\":\"...\"}}]")
+                        r=get_ai_response(f"Create {int(sn)} SAQs on {topic} for FSc/MDCAT. ONLY JSON:\n[{{\"question\":\"?\",\"model_answer\":\"2-3 sentences.\",\"hint\":\"...\"}}]")
                         for q in safe_json(r.text): q.update({"type":"saq","marks":int(sm),"answer":None}); all_q.append(q)
                     ts=(int(mn)*60 if um else 0)+(int(sn)*180 if us else 0)+300
                     st.session_state.update({"all_questions":all_q,"test_id":None,"attempt_id":None,"total_marks":sum(q["marks"] for q in all_q),"t_start":time.time(),"t_limit":ts,"current_q":0,"answers":{},"submitted_current":False,"score":0,"saq_eval":{},"q_t":None,"time_up":False,"streak":0,"max_streak":0,"hint_used":{},"bookmarked":[],"quiz_started":True,"quiz_done":False,"test_mode":"ai","page":"quiz","skipped_questions":[],"question_order":list(range(len(all_q))),"showing_result":False})
@@ -550,7 +611,7 @@ elif st.session_state.page=="quiz" and not st.session_state.quiz_done:
     # ── SAQ ──────────────────────────────────────────────────────────────
     elif q["type"]=="saq":
         if not st.session_state.submitted_current:
-            ua=st.text_area("Your answer:",key=f"saq{idx}",height=120)
+            ua=chem_text_area("Your answer:",f"saq{idx}",height=120,placeholder="Type your answer here... use 🔬 symbols toolbar for chemical formulas")
             btn_col1,btn_col2=st.columns([3,1])
             with btn_col1:
                 if st.button("✅ Submit Answer",use_container_width=True,key=f"ssub{idx}"):
@@ -576,7 +637,7 @@ elif st.session_state.page=="quiz" and not st.session_state.quiz_done:
                                     f"Respond ONLY with this JSON (no extra text):\n"
                                     f"{{\"marks_awarded\": 0, \"feedback\": \"...\", \"spelling_mistakes\": []}}"
                                 )
-                                er=ai.generate_content(prompt)
+                                er=get_ai_response(prompt)
                                 ev=safe_json(er.text)
                                 ev["marks_awarded"]=min(int(ev.get("marks_awarded",0)),q["marks"])
                                 if not ua.strip(): ev["marks_awarded"]=0
